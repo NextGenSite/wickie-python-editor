@@ -866,9 +866,12 @@ sys.modules['turtle'] = _turtle_mod
             const blob = new Blob([editor.getValue()], { type: 'text/plain' });
             const a = document.createElement('a');
             a.href = URL.createObjectURL(blob);
-            a.download = 'code.py';
+            const tab = getActiveTab();
+            const rawTitle = tab?.title?.replace(/^[^\w]+/, '').trim() || 'code';
+            a.download = rawTitle + '.py';
             a.click();
             URL.revokeObjectURL(a.href);
+            appendLine('\n💡 Browser-Hinweis: ".py"-Dateien werden manchmal als gefährlich markiert — das ist normal. Klicke im Browser auf "Behalten" oder "Keep" um die Datei zu speichern.\n', 'info');
         });
 
         // ─── Load .py ─────────────────────────────────────────────────────────────────
@@ -1091,6 +1094,33 @@ sys.modules['turtle'] = _turtle_mod
             }
         }
 
+        async function _saveTaskAsProject(tab) {
+            const title = (tab.title || '').replace(/^📝\s*/, '').trim() || 'Aufgabe';
+            const code = editor.getValue();
+            if (tab.taskProjectId) {
+                await _sb.from('submissions')
+                    .update({ code, updated_at: new Date().toISOString() })
+                    .eq('id', tab.taskProjectId);
+            } else {
+                const { data: existing } = await _sb.from('submissions')
+                    .select('id')
+                    .eq('user_id', currentUser.id)
+                    .eq('title', title)
+                    .maybeSingle();
+                if (existing) {
+                    tab.taskProjectId = existing.id;
+                    await _sb.from('submissions')
+                        .update({ code, updated_at: new Date().toISOString() })
+                        .eq('id', existing.id);
+                } else {
+                    const { data } = await _sb.from('submissions')
+                        .insert({ user_id: currentUser.id, title, code, description: '' })
+                        .select('id').single();
+                    if (data) tab.taskProjectId = data.id;
+                }
+            }
+        }
+
         async function _saveTaskToDb(status) {
             const tab = getActiveTab();
             if (!tab?.taskId) return false;
@@ -1119,7 +1149,8 @@ sys.modules['turtle'] = _turtle_mod
             if (btn) { btn.disabled = true; btn.textContent = '…'; }
             try {
                 await _saveTaskToDb('in_progress');
-                appendLine('\n💾 Aufgabe gespeichert.\n', 'ok');
+                await _saveTaskAsProject(tab);
+                appendLine('\n💾 Aufgabe gespeichert (auch in Meine Projekte).\n', 'ok');
             } catch(err) {
                 appendLine(`\n✗ Fehler beim Speichern: ${err.message}\n`, 'err');
             } finally {
@@ -1546,13 +1577,13 @@ sys.modules['turtle'] = _turtle_mod
         // ── Projekt speichern ─────────────────────────────────────────────────
 
         function handleSaveBtn() {
-            const tab = getActiveTab();
-            if (tab?.taskId) { saveTaskProgress(); return; }
             openSaveTitleModal();
         }
 
         function openSaveTitleModal() {
-            document.getElementById('saveTitleInput').value = '';
+            const tab = getActiveTab();
+            const defaultTitle = tab?.title ? tab.title.replace(/^📝\s*/, '').trim() : '';
+            document.getElementById('saveTitleInput').value = defaultTitle;
             document.getElementById('saveError').classList.remove('show');
             openModal('saveTitleModal');
             setTimeout(() => document.getElementById('saveTitleInput').focus(), 200);
@@ -1562,18 +1593,13 @@ sys.modules['turtle'] = _turtle_mod
             if (e.key === 'Enter') handleCloudSave();
         });
 
-        async function handleCloudSaveTask() {
-            await saveTaskProgress();
-        }
-
         async function handleCloudSave() {
-            const tab = getActiveTab();
-            if (tab?.taskId) { await saveTaskProgress(); return; }
             const title = document.getElementById('saveTitleInput').value.trim() || 'Unbenannt';
             const btn = document.getElementById('saveSubmitBtn');
             btn.disabled = true; btn.textContent = '…';
 
             try {
+                const tab = getActiveTab();
                 const desc = document.getElementById('descInput')?.value.trim() || '';
                 const code = editor.getValue();
                 const { data, error } = await _sb.from('submissions').insert({
@@ -1583,13 +1609,14 @@ sys.modules['turtle'] = _turtle_mod
                     code,
                 }).select().single();
                 if (error) throw error;
-                // Aktuellen Tab mit neuer Projekt-ID verknüpfen
-                const tab = getActiveTab();
                 if (tab) {
                     tab.title = title;
                     tab.projectId = data.id;
                     tab.projectTitle = title;
                     renderTabBar();
+                }
+                if (tab?.taskId) {
+                    await _saveTaskToDb('in_progress');
                 }
                 closeModal('saveTitleModal');
                 appendLine(`\n☁️ Projekt "${title}" gespeichert.\n`, 'ok');
