@@ -457,7 +457,7 @@
 
         // ── Students Grid ─────────────────────────────────────────────────────────
         function renderStudentsGrid(list) {
-            list = list ?? _students;
+            list = list ?? (_currentClassId ? _students.filter(s => s.class_id === _currentClassId) : _students);
             const el = document.getElementById('studentsGrid');
             if (!list.length) {
                 el.innerHTML = '<div class="empty-state"><div class="empty-icon">👥</div><p>Keine Schüler gefunden</p></div>';
@@ -489,7 +489,8 @@
 
         function filterStudents() {
             const q = document.getElementById('studentSearch').value.toLowerCase();
-            renderStudentsGrid(_students.filter(s => fullName(s).toLowerCase().includes(q)));
+            const base = _currentClassId ? _students.filter(s => s.class_id === _currentClassId) : _students;
+            renderStudentsGrid(base.filter(s => fullName(s).toLowerCase().includes(q)));
         }
 
         // ── Student Detail ────────────────────────────────────────────────────────
@@ -698,6 +699,8 @@
             const [title, sub] = viewTitles[name] || ['', ''];
             if (title) document.getElementById('topbarTitle').textContent = title;
             if (sub) document.getElementById('topbarSub').textContent = sub;
+            const sel = document.getElementById('classSelector');
+            if (sel) sel.style.display = (name === 'classes' || _classes.length <= 1) ? 'none' : 'inline-block';
         }
 
         // ── Class Info Card (overview) ────────────────────────────────────────────
