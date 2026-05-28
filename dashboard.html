@@ -357,8 +357,16 @@
 
         async function loadAll() {
             try {
+                const myClassIds = _classes.map(c => c.id);
+                if (!myClassIds.length) {
+                    _students = []; _submissions = []; _classCounts = {}; _profileMap = {};
+                    updateNavBadges();
+                    renderStats(); renderRecent(); renderStudentsGrid();
+                    renderAllProjects(); renderClassInfo(); renderClassesView();
+                    return;
+                }
                 const [{ data: students, error: e1 }, { data: subs, error: e2 }] = await Promise.all([
-                    _sb.from('profiles').select('*').eq('role', 'student').order('first_name'),
+                    _sb.from('profiles').select('*').eq('role', 'student').in('class_id', myClassIds).order('first_name'),
                     _sb.from('submissions').select('*').order('updated_at', { ascending: false }),
                 ]);
                 if (e1) console.error('profiles error:', e1);
