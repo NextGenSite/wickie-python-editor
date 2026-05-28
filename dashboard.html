@@ -707,7 +707,7 @@
             if (title) document.getElementById('topbarTitle').textContent = title;
             if (sub) document.getElementById('topbarSub').textContent = sub;
             const sel = document.getElementById('classSelector');
-            const noFilter = name === 'classes' || name === 'task-detail' || _classes.length <= 1;
+            const noFilter = name === 'classes' || name === 'task-detail' || name === 'projects' || _classes.length <= 1;
             if (sel) sel.style.display = noFilter ? 'none' : 'inline-block';
         }
 
