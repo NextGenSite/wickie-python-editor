@@ -690,7 +690,7 @@
             el.innerHTML = createBtn + _classes.map(cls => {
                 const isActive = cls.id === _currentClassId;
                 const stuCount = _classCounts[cls.id] ?? 0;
-                return `<div class="class-row" style="cursor:${isActive ? 'default' : 'pointer'}" ${!isActive ? `onclick="switchClass('${cls.id}')"` : ''}>
+                return `<div class="class-row">
                 <div class="class-icon" style="font-size:1.5rem">🏫</div>
                 <div style="flex:1;min-width:0">
                     <div class="class-row-name">${esc(cls.name)}</div>
