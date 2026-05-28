@@ -1062,6 +1062,8 @@ sys.modules['turtle'] = _turtle_mod
 
             const code = existing?.code || task.starter_code || '';
             createTab(`📝 ${task.title}`, code, '', null, null, task.id);
+            const tab = getActiveTab();
+            if (tab) tab.taskStatus = existing?.status || 'open';
             appendLine(`\n📝 Aufgabe "${task.title}" geöffnet.\n`, 'ok');
             updateTaskModeUI();
             const submitBtn = document.getElementById('submitTaskBtn');
@@ -1094,16 +1096,24 @@ sys.modules['turtle'] = _turtle_mod
         async function saveTaskProgress() {
             const tab = getActiveTab();
             if (!tab?.taskId) return;
-            const btn = document.getElementById('submitTaskBtn');
-            const origText = btn.textContent;
+            const saveBtn = document.getElementById('taskSaveBtn');
+            if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = '…'; }
             try {
-                await _sb.from('task_submissions').upsert({
+                // Nicht von 'submitted' auf 'in_progress' zurücksetzen
+                const newStatus = tab.taskStatus === 'submitted' ? 'submitted' : 'in_progress';
+                const { error } = await _sb.from('task_submissions').upsert({
                     task_id: tab.taskId, user_id: currentUser.id,
-                    code: editor.getValue(), status: 'in_progress',
+                    code: editor.getValue(), status: newStatus,
                     updated_at: new Date().toISOString()
                 }, { onConflict: 'task_id,user_id' });
+                if (error) throw error;
+                if (tab.taskStatus !== 'submitted') tab.taskStatus = 'in_progress';
                 appendLine('\n💾 Aufgabe gespeichert.\n', 'ok');
-            } catch(err) { appendLine(`\n✗ Fehler: ${err.message}\n`, 'err'); }
+            } catch(err) {
+                appendLine(`\n✗ Fehler beim Speichern: ${err.message}\n`, 'err');
+            } finally {
+                if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '💾 Speichern'; }
+            }
         }
 
         async function submitTask() {
@@ -1113,16 +1123,18 @@ sys.modules['turtle'] = _turtle_mod
             const origText = btn.textContent;
             btn.disabled = true; btn.textContent = '…';
             try {
-                await _sb.from('task_submissions').upsert({
+                const { error } = await _sb.from('task_submissions').upsert({
                     task_id: tab.taskId, user_id: currentUser.id,
                     code: editor.getValue(), status: 'submitted',
                     updated_at: new Date().toISOString()
                 }, { onConflict: 'task_id,user_id' });
+                if (error) throw error;
+                tab.taskStatus = 'submitted';
                 appendLine('\n✅ Aufgabe abgegeben!\n', 'ok');
                 btn.disabled = false;
                 btn.textContent = '✓ Abgegeben';
             } catch(err) {
-                appendLine(`\n✗ Fehler: ${err.message}\n`, 'err');
+                appendLine(`\n✗ Fehler beim Abgeben: ${err.message}\n`, 'err');
                 btn.disabled = false; btn.textContent = origText;
             }
         }
