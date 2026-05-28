@@ -286,6 +286,7 @@
         let _classCounts = {};
         let _tasks = [];
         let _selectedTaskId = null;
+        let _activeView = 'overview';
         let _classes = [];
         let _currentClassId = null;
         let _teacherId = null;
@@ -681,6 +682,7 @@
         };
 
         function switchView(name, btnEl) {
+            _activeView = name;
             document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
             document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
             document.getElementById('view-' + name).classList.add('active');
@@ -820,7 +822,7 @@
 
         async function refreshAll() {
             await Promise.all([loadAll(), loadTasks()]);
-            if (_selectedTaskId) openTaskDetail(_selectedTaskId);
+            if (_selectedTaskId && _activeView === 'task-detail') openTaskDetail(_selectedTaskId);
         }
 
         // ── Tasks ─────────────────────────────────────────────────────────────────
