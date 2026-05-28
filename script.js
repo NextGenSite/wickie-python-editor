@@ -1722,7 +1722,7 @@ WEITERE REGELN:
             document.getElementById('statToday').textContent = '—';
 
             const [{ data: students }, { data: subs }] = await Promise.all([
-                _sb.from('profiles').select('*').eq('role', 'student').order('name'),
+                _sb.from('profiles').select('*').eq('role', 'student').order('first_name'),
                 _sb.from('submissions').select('id,user_id,title,description,code,created_at,updated_at').order('updated_at', { ascending: false })
             ]);
 
