@@ -232,6 +232,7 @@
         let _students = [];
         let _submissions = [];
         let _profileMap = {};
+        let _classCounts = {};
         let _classes = [];
         let _currentClassId = null;
         let _teacherId = null;
@@ -283,9 +284,16 @@
         }
 
         async function loadClasses() {
-            const { data, error } = await _sb.from('classes').select('*').eq('teacher_id', _teacherId).order('created_at');
+            const [{ data, error }, { data: counts }] = await Promise.all([
+                _sb.from('classes').select('*').eq('teacher_id', _teacherId).order('created_at'),
+                _sb.from('profiles').select('class_id').eq('role', 'student')
+            ]);
             if (error) console.error('loadClasses error:', error);
             _classes = data || [];
+            _classCounts = {};
+            for (const r of (counts || [])) {
+                if (r.class_id) _classCounts[r.class_id] = (_classCounts[r.class_id] || 0) + 1;
+            }
             _currentClassId = _classes[0]?.id ?? null;
             renderClassSelector();
             renderClassesView();
@@ -298,12 +306,18 @@
                 let studentsQuery = _sb.from('profiles').select('*').eq('role', 'student').order('name');
                 if (_currentClassId) studentsQuery = studentsQuery.eq('class_id', _currentClassId);
 
-                const [{ data: students, error: e1 }, { data: subs, error: e2 }] = await Promise.all([
+                const [{ data: students, error: e1 }, { data: subs, error: e2 }, { data: allCounts }] = await Promise.all([
                     studentsQuery,
-                    _sb.from('submissions').select('*').order('updated_at', { ascending: false })
+                    _sb.from('submissions').select('*').order('updated_at', { ascending: false }),
+                    _sb.from('profiles').select('class_id').eq('role', 'student')
                 ]);
                 if (e1) console.error('profiles error:', e1);
                 if (e2) console.error('submissions error:', e2);
+
+                _classCounts = {};
+                for (const r of (allCounts || [])) {
+                    if (r.class_id) _classCounts[r.class_id] = (_classCounts[r.class_id] || 0) + 1;
+                }
 
                 _students = students || [];
                 const studentIds = new Set(_students.map(s => s.id));
@@ -675,7 +689,7 @@
             }
             el.innerHTML = createBtn + _classes.map(cls => {
                 const isActive = cls.id === _currentClassId;
-                const stuCount = isActive ? _students.length : '–';
+                const stuCount = _classCounts[cls.id] ?? 0;
                 return `<div class="class-row" style="cursor:${isActive ? 'default' : 'pointer'}" ${!isActive ? `onclick="switchClass('${cls.id}')"` : ''}>
                 <div class="class-icon" style="font-size:1.5rem">🏫</div>
                 <div style="flex:1;min-width:0">
