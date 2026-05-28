@@ -143,6 +143,7 @@
         <div id="userMenu" style="display:none">
             <span id="userEmail"></span>
             <button id="joinClassBtn2" onclick="openJoinClassModal()" style="display:none">🏫 Klasse beitreten</button>
+            <button id="aufgabenBtn" onclick="openTasksModal()" style="display:none">📝 Aufgaben</button>
             <button id="dashboardBtn" onclick="openDashboard()" style="display:none">📊 Dashboard</button>
             <button onclick="openProfileModal()">👤 Profil</button>
             <button id="logoutBtn" onclick="doLogout()">Abmelden</button>
@@ -173,6 +174,7 @@
         <div class="sep"></div>
         <button id="cloudSaveBtn" onclick="openSaveTitleModal()">☁️ Neu speichern</button>
         <button id="updateProjectBtn" onclick="handleUpdateProject()">💾 Aktualisieren</button>
+        <button id="submitTaskBtn" onclick="submitTask()" style="display:none;background:linear-gradient(135deg,#a6e3a1,#40a02b);color:#1e1e2e;font-weight:700;border:none;border-radius:10px;padding:0 16px;height:36px;cursor:pointer;font-size:0.85rem">✅ Abgeben</button>
         <span id="activeProjectLabel" style="display:none">📄 <span id="activeProjectName"></span></span>
         <button id="myProjectsBtn" onclick="openProjectsModal()">📁 Meine Projekte</button>
         <button id="qrBtn" onclick="openQrModal()" title="QR-Code für Aufgabe generieren">📲 QR-Aufgabe</button>
@@ -448,6 +450,32 @@
             <div class="sb-error" id="joinClassError"></div>
             <button class="sb-btn-primary" id="joinClassBtn" onclick="joinClass()">Klasse beitreten</button>
             <div class="sb-modal-switch"><a onclick="closeModal('joinClassModal')">Später eingeben</a></div>
+        </div>
+    </div>
+
+    <!-- ══ AUFGABEN MODAL ══ -->
+    <div class="sb-modal-overlay" id="tasksModal">
+        <div class="sb-modal" style="max-width:520px">
+            <button class="sb-modal-close" onclick="closeModal('tasksModal')">✕</button>
+            <h2>📝 Meine <span>Aufgaben</span></h2>
+            <div id="tasksList" style="margin-top:8px"></div>
+        </div>
+    </div>
+
+    <!-- ══ TASK DETAIL MODAL ══ -->
+    <div class="sb-modal-overlay" id="taskDetailModal">
+        <div class="sb-modal" style="max-width:520px">
+            <button class="sb-modal-close" onclick="closeModal('taskDetailModal')">✕</button>
+            <h2 id="taskDetailTitle">📝 <span>Aufgabe</span></h2>
+            <div id="taskDetailDesc" style="font-size:0.85rem;color:#a6adc8;line-height:1.6;margin-bottom:12px"></div>
+            <div id="taskDetailStarterWrap" style="display:none;margin-bottom:12px">
+                <div style="font-size:0.78rem;font-weight:600;color:#6c7086;margin-bottom:6px">Starter-Code:</div>
+                <pre id="taskDetailStarter" style="background:#1e1e2e;border:1px solid #313244;border-radius:8px;padding:12px;font-size:0.8rem;overflow-x:auto;white-space:pre-wrap"></pre>
+            </div>
+            <div style="display:flex;gap:10px;margin-top:4px">
+                <button class="sb-btn-primary" style="flex:1" onclick="startTask()">✏️ Aufgabe bearbeiten</button>
+                <button onclick="closeModal('taskDetailModal')" style="flex:0 0 auto;padding:0 16px;border-radius:10px;border:1px solid #45475a;background:transparent;color:#a6adc8;font-size:0.85rem;cursor:pointer">Abbrechen</button>
+            </div>
         </div>
     </div>
 

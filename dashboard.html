@@ -45,6 +45,10 @@
                 <span class="nav-icon">🏫</span> Klassen
                 <span class="nav-badge" id="navBadgeClasses">0</span>
             </button>
+            <button class="nav-item" data-view="tasks" onclick="switchView('tasks', this)">
+                <span class="nav-icon">📝</span> Aufgaben
+                <span class="nav-badge" id="navBadgeTasks">0</span>
+            </button>
         </nav>
 
         <div class="sidebar-footer">
@@ -164,6 +168,20 @@
                 </div>
             </div>
 
+            <!-- AUFGABEN -->
+            <div class="view" id="view-tasks">
+                <div id="tasksViewContent">
+                    <div style="color:var(--muted);font-size:0.85rem">Lade…</div>
+                </div>
+            </div>
+
+            <!-- AUFGABE DETAIL -->
+            <div class="view" id="view-task-detail">
+                <button class="topbar-btn" style="margin-bottom:20px"
+                    onclick="switchView('tasks', document.querySelector('[data-view=tasks]'))">← Zurück zu Aufgaben</button>
+                <div id="taskDetailContent"></div>
+            </div>
+
             <!-- ALLE PROJEKTE -->
             <div class="view" id="view-projects">
                 <div id="projectFilters" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px"></div>
@@ -224,6 +242,39 @@
         </div>
     </div>
 
+    <!-- Create Task Modal -->
+    <div class="modal-overlay" id="createTaskModal" style="display:none" onclick="if(event.target===this)closeCreateTaskModal()">
+        <div class="modal-box" style="max-width:520px">
+            <button class="modal-close" onclick="closeCreateTaskModal()">✕</button>
+            <div class="modal-title">📝 Neue Aufgabe erstellen</div>
+            <label style="font-size:0.8rem;font-weight:600;color:var(--muted);display:block;margin-bottom:4px">Klasse</label>
+            <select class="modal-input" id="taskClassSelect" style="cursor:pointer"></select>
+            <label style="font-size:0.8rem;font-weight:600;color:var(--muted);display:block;margin:10px 0 4px">Titel *</label>
+            <input class="modal-input" type="text" id="taskTitleInput" placeholder="z.B. Schleifen Aufgabe">
+            <label style="font-size:0.8rem;font-weight:600;color:var(--muted);display:block;margin:10px 0 4px">Beschreibung</label>
+            <textarea class="modal-input" id="taskDescInput" rows="3" placeholder="Aufgabenstellung für die Schüler…" style="resize:vertical"></textarea>
+            <label style="font-size:0.8rem;font-weight:600;color:var(--muted);display:block;margin:10px 0 4px">Starter-Code <span style="font-weight:400;opacity:0.6">(optional)</span></label>
+            <textarea class="modal-input" id="taskStarterInput" rows="4" placeholder="# Hier beginnen..." style="font-family:monospace;font-size:0.82rem;resize:vertical"></textarea>
+            <label style="font-size:0.8rem;font-weight:600;color:var(--muted);display:block;margin:10px 0 4px">Abgabedatum <span style="font-weight:400;opacity:0.6">(optional)</span></label>
+            <input class="modal-input" type="date" id="taskDueDateInput" style="margin-bottom:14px">
+            <div class="modal-error" id="createTaskError"></div>
+            <div style="display:flex;gap:10px">
+                <button class="topbar-btn" style="flex:1" onclick="closeCreateTaskModal()">Abbrechen</button>
+                <button class="topbar-btn primary" style="flex:1" id="createTaskBtn" onclick="createTask()">Erstellen</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Task Code View Modal -->
+    <div class="modal-overlay" id="taskCodeModal" style="display:none" onclick="if(event.target===this)document.getElementById('taskCodeModal').style.display='none'">
+        <div class="modal-box" style="max-width:600px">
+            <button class="modal-close" onclick="document.getElementById('taskCodeModal').style.display='none'">✕</button>
+            <div class="modal-title">👁 Code von <span id="taskCodeStudentName"></span></div>
+            <div id="taskCodeStatus" style="font-size:0.8rem;color:var(--muted);margin-bottom:10px"></div>
+            <pre id="taskCodePre" style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px;font-size:0.82rem;overflow-x:auto;max-height:400px;overflow-y:auto;white-space:pre-wrap;word-break:break-all"></pre>
+        </div>
+    </div>
+
     <script>
         const SUPABASE_URL = 'https://pqxpxeemhdjpipggyhgz.supabase.co';
         const SUPABASE_KEY = 'sb_publishable_jbJW0m89PVGXoT6_rmgQ0Q_-4DKlNVk';
@@ -233,6 +284,8 @@
         let _submissions = [];
         let _profileMap = {};
         let _classCounts = {};
+        let _tasks = [];
+        let _selectedTaskId = null;
         let _classes = [];
         let _currentClassId = null;
         let _teacherId = null;
@@ -279,7 +332,7 @@
             document.getElementById('sidebarAvatar').textContent = name[0].toUpperCase();
 
             await loadClasses();
-            await loadAll();
+            await Promise.all([loadAll(), loadTasks()]);
             document.getElementById('loadingScreen').style.display = 'none';
         }
 
@@ -622,7 +675,9 @@
             students: ['Schüler', 'Schüler deiner Klasse'],
             'student-detail': ['', ''],
             projects: ['Alle Projekte', 'Projektarchiv deiner Klasse'],
-            classes: ['Klassen', 'Erstelle und verwalte deine Klassen']
+            classes: ['Klassen', 'Erstelle und verwalte deine Klassen'],
+            tasks: ['Aufgaben', 'Erstelle und verwalte Aufgaben'],
+            'task-detail': ['Aufgabe Details', 'Schüler-Abgaben im Überblick'],
         };
 
         function switchView(name, btnEl) {
@@ -761,6 +816,156 @@
             if (_currentClassId === classId) _currentClassId = null;
             await loadClasses();
             await loadAll();
+        }
+
+        // ── Tasks ─────────────────────────────────────────────────────────────────
+        async function loadTasks() {
+            const { data, error } = await _sb.from('tasks')
+                .select('*').eq('teacher_id', _teacherId).order('created_at', { ascending: false });
+            if (error) console.error('loadTasks error:', error);
+            _tasks = data || [];
+            document.getElementById('navBadgeTasks').textContent = _tasks.length;
+            renderTasksView();
+        }
+
+        function renderTasksView() {
+            const el = document.getElementById('tasksViewContent');
+            if (!el) return;
+            const createBtn = `<button class="topbar-btn primary" onclick="openCreateTaskModal()" style="margin-bottom:20px">+ Neue Aufgabe erstellen</button>`;
+            if (!_tasks.length) {
+                el.innerHTML = createBtn + `<div class="no-class-card"><div class="nc-icon">📝</div><p>Noch keine Aufgaben erstellt.</p></div>`;
+                return;
+            }
+            el.innerHTML = createBtn + _tasks.map(task => {
+                const cls = _classes.find(c => c.id === task.class_id);
+                const stuCount = _classCounts[task.class_id] ?? 0;
+                const due = task.due_date ? ` · bis ${fmtDate(task.due_date)}` : '';
+                return `<div class="class-row" style="cursor:pointer" onclick="openTaskDetail('${task.id}')">
+                    <div class="class-icon" style="font-size:1.5rem">📝</div>
+                    <div style="flex:1;min-width:0">
+                        <div class="class-row-name">${esc(task.title)}</div>
+                        <div class="class-row-sub">Klasse: ${esc(cls?.name || '—')} · ${stuCount} Schüler${due}</div>
+                    </div>
+                    <button class="topbar-btn" style="color:var(--red);border-color:var(--red)"
+                        onclick="event.stopPropagation();deleteTask('${task.id}')">🗑</button>
+                </div>`;
+            }).join('');
+        }
+
+        async function openTaskDetail(taskId) {
+            _selectedTaskId = taskId;
+            switchView('task-detail', null);
+            const el = document.getElementById('taskDetailContent');
+            el.innerHTML = '<div style="padding:20px;color:var(--muted)">Lade…</div>';
+            const task = _tasks.find(t => t.id === taskId);
+            if (!task) return;
+            const cls = _classes.find(c => c.id === task.class_id);
+
+            const [{ data: subs }, { data: students }] = await Promise.all([
+                _sb.from('task_submissions').select('*').eq('task_id', taskId),
+                _sb.from('profiles').select('*').eq('class_id', task.class_id).eq('role', 'student').order('first_name')
+            ]);
+
+            const subsMap = {};
+            for (const s of (subs || [])) subsMap[s.user_id] = s;
+            const stuCount = students?.length || 0;
+            const submittedCount = (subs || []).filter(s => s.status === 'submitted').length;
+            const inProgressCount = (subs || []).filter(s => s.status === 'in_progress').length;
+
+            const statusBadge = s => {
+                const status = subsMap[s.id]?.status || 'open';
+                if (status === 'submitted') return '<span style="color:var(--green);font-weight:600">✓ Abgegeben</span>';
+                if (status === 'in_progress') return '<span style="color:var(--yellow);font-weight:600">✏️ In Bearbeitung</span>';
+                return '<span style="color:var(--muted)">○ Offen</span>';
+            };
+
+            let html = `<div class="class-card" style="margin-bottom:20px">
+                <div class="class-card-left">
+                    <div class="class-icon-big">📝</div>
+                    <div>
+                        <div class="class-name">${esc(task.title)}</div>
+                        <div class="class-sub">
+                            ${esc(cls?.name || '—')} ·
+                            <span style="color:var(--green)">${submittedCount} abgegeben</span> ·
+                            <span style="color:var(--yellow)">${inProgressCount} in Bearbeitung</span> ·
+                            <span style="color:var(--muted)">${stuCount - submittedCount - inProgressCount} offen</span>
+                        </div>
+                    </div>
+                </div>
+            </div>`;
+
+            if (task.description) {
+                html += `<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 18px;margin-bottom:16px;font-size:0.88rem;line-height:1.6">${esc(task.description).replace(/\n/g,'<br>')}</div>`;
+            }
+            if (task.starter_code) {
+                html += `<details style="margin-bottom:16px"><summary style="cursor:pointer;font-size:0.83rem;color:var(--muted);padding:6px 0;user-select:none">Starter-Code anzeigen ▾</summary>
+                    <pre style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:0.8rem;overflow-x:auto;margin-top:8px;white-space:pre-wrap">${esc(task.starter_code)}</pre>
+                </details>`;
+            }
+
+            html += `<div class="section-header" style="margin-bottom:12px"><div class="section-title">Schüler-Abgaben</div></div>`;
+            if (!stuCount) {
+                html += '<div style="color:var(--muted);font-size:0.85rem">Keine Schüler in dieser Klasse.</div>';
+            } else {
+                html += (students || []).map(s => {
+                    const hasSub = subsMap[s.id]?.code;
+                    return `<div class="class-student-item" style="gap:16px">
+                        <span style="flex:1;font-weight:500">${esc(fullName(s))}</span>
+                        <span>${statusBadge(s)}</span>
+                        ${hasSub ? `<button class="topbar-btn" onclick="showTaskCode('${s.id}','${taskId}')">👁 Code</button>` : `<span style="display:inline-block;width:80px"></span>`}
+                    </div>`;
+                }).join('');
+            }
+            el.innerHTML = html;
+        }
+
+        async function showTaskCode(userId, taskId) {
+            const { data } = await _sb.from('task_submissions').select('code,status,updated_at').eq('task_id', taskId).eq('user_id', userId).single();
+            const s = _profileMap[userId] || (await _sb.from('profiles').select('*').eq('id', userId).single()).data;
+            const statusMap = { open: '○ Offen', in_progress: '✏️ In Bearbeitung', submitted: '✓ Abgegeben' };
+            document.getElementById('taskCodeStudentName').textContent = s ? fullName(s) : 'Schüler';
+            document.getElementById('taskCodeStatus').textContent = `Status: ${statusMap[data?.status] || '—'} · Zuletzt gespeichert: ${data?.updated_at ? fmtDate(data.updated_at) : '—'}`;
+            document.getElementById('taskCodePre').textContent = data?.code || '(kein Code)';
+            document.getElementById('taskCodeModal').style.display = 'flex';
+        }
+
+        function openCreateTaskModal() {
+            const sel = document.getElementById('taskClassSelect');
+            sel.innerHTML = _classes.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+            document.getElementById('taskTitleInput').value = '';
+            document.getElementById('taskDescInput').value = '';
+            document.getElementById('taskStarterInput').value = '';
+            document.getElementById('taskDueDateInput').value = '';
+            document.getElementById('createTaskError').textContent = '';
+            document.getElementById('createTaskModal').style.display = 'flex';
+            setTimeout(() => document.getElementById('taskTitleInput').focus(), 150);
+        }
+        function closeCreateTaskModal() { document.getElementById('createTaskModal').style.display = 'none'; }
+
+        async function createTask() {
+            const title = document.getElementById('taskTitleInput').value.trim();
+            const errEl = document.getElementById('createTaskError');
+            if (!title) { errEl.textContent = 'Bitte einen Titel eingeben.'; return; }
+            const btn = document.getElementById('createTaskBtn');
+            btn.disabled = true; btn.textContent = '…';
+            const classId = document.getElementById('taskClassSelect').value;
+            const description = document.getElementById('taskDescInput').value.trim();
+            const starterCode = document.getElementById('taskStarterInput').value;
+            const dueDate = document.getElementById('taskDueDateInput').value || null;
+            const { error } = await _sb.from('tasks').insert({
+                teacher_id: _teacherId, class_id: classId, title, description, starter_code: starterCode, due_date: dueDate
+            });
+            btn.disabled = false; btn.textContent = 'Erstellen';
+            if (error) { errEl.textContent = error.message; return; }
+            closeCreateTaskModal();
+            await loadTasks();
+        }
+
+        async function deleteTask(taskId) {
+            const task = _tasks.find(t => t.id === taskId);
+            if (!confirm(`Aufgabe "${task?.title}" wirklich löschen? Alle Abgaben werden ebenfalls gelöscht.`)) return;
+            await _sb.from('tasks').delete().eq('id', taskId);
+            await loadTasks();
         }
 
         function renderClassSelector() {

@@ -830,6 +830,8 @@ body {
 
 .modal-error { color: var(--red); font-size: 0.8rem; margin-bottom: 10px; display: none; }
 
+.class-row[style*="cursor:pointer"]:hover { border-color: var(--blue); }
+
 .class-row {
     background: var(--card);
     border: 1px solid var(--border);

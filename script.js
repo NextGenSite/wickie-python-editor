@@ -950,6 +950,8 @@ sys.modules['turtle'] = _turtle_mod
         let currentProfile = null;
         let _currentProjectId = null;
         let _currentProjectTitle = null;
+        let _currentTaskId = null;
+        let _currentTaskData = null;
 
         _sb.auth.onAuthStateChange((_event, session) => {
             currentUser = session?.user ?? null;
@@ -977,6 +979,124 @@ sys.modules['turtle'] = _turtle_mod
             const hasClass = data?.class_id;
             const btn = document.getElementById('joinClassBtn2');
             if (btn) btn.style.display = (isStudent && !hasClass) ? 'inline-flex' : 'none';
+        }
+
+        // ── Aufgaben (Student) ────────────────────────────────────────────────────
+        async function openTasksModal() {
+            openModal('tasksModal');
+            const list = document.getElementById('tasksList');
+            list.innerHTML = '<div style="color:#6c7086;font-size:0.85rem;padding:10px 0">Lade Aufgaben…</div>';
+            const { data: profile } = await _sb.from('profiles').select('class_id').eq('id', currentUser.id).single();
+            if (!profile?.class_id) {
+                list.innerHTML = '<div style="color:#6c7086;font-size:0.85rem">Du bist noch in keiner Klasse.</div>';
+                return;
+            }
+            const { data: tasks } = await _sb.from('tasks').select('*').eq('class_id', profile.class_id).order('created_at', { ascending: false });
+            if (!tasks?.length) {
+                list.innerHTML = '<div style="color:#6c7086;font-size:0.85rem">Noch keine Aufgaben vorhanden.</div>';
+                return;
+            }
+            const { data: mySubs } = await _sb.from('task_submissions').select('task_id,status').eq('user_id', currentUser.id);
+            const subMap = {};
+            for (const s of (mySubs || [])) subMap[s.task_id] = s.status;
+
+            list.innerHTML = tasks.map(task => {
+                const status = subMap[task.id];
+                let badge = '<span style="color:#6c7086;font-size:0.78rem">○ Offen</span>';
+                if (status === 'in_progress') badge = '<span style="color:#f9e2af;font-size:0.78rem">✏️ In Bearbeitung</span>';
+                if (status === 'submitted') badge = '<span style="color:#a6e3a1;font-size:0.78rem">✓ Abgegeben</span>';
+                const due = task.due_date ? `<span style="font-size:0.75rem;color:#6c7086"> · bis ${new Date(task.due_date).toLocaleDateString('de-DE')}</span>` : '';
+                return `<div onclick="showTaskDetail('${task.id}')" style="background:#1e1e2e;border:1px solid #313244;border-radius:12px;padding:14px 16px;margin-bottom:8px;cursor:pointer;transition:border-color 0.2s" onmouseover="this.style.borderColor='#89b4fa'" onmouseout="this.style.borderColor='#313244'">
+                    <div style="font-weight:700;margin-bottom:4px">${escapeHtml(task.title)}</div>
+                    <div style="display:flex;align-items:center;gap:10px">${badge}${due}</div>
+                </div>`;
+            }).join('');
+            list._tasks = tasks;
+        }
+
+        function showTaskDetail(taskId) {
+            const tasks = document.getElementById('tasksList')._tasks || [];
+            const task = tasks.find(t => t.id === taskId);
+            if (!task) return;
+            _currentTaskData = task;
+            document.getElementById('taskDetailTitle').innerHTML = `📝 <span>${escapeHtml(task.title)}</span>`;
+            document.getElementById('taskDetailDesc').innerHTML = task.description
+                ? escapeHtml(task.description).replace(/\n/g, '<br>')
+                : '<span style="color:#6c7086">Keine Beschreibung.</span>';
+            const starterWrap = document.getElementById('taskDetailStarterWrap');
+            if (task.starter_code) {
+                document.getElementById('taskDetailStarter').textContent = task.starter_code;
+                starterWrap.style.display = 'block';
+            } else {
+                starterWrap.style.display = 'none';
+            }
+            closeModal('tasksModal');
+            openModal('taskDetailModal');
+        }
+
+        async function startTask() {
+            if (!_currentTaskData) return;
+            const task = _currentTaskData;
+            closeModal('taskDetailModal');
+            _currentTaskId = task.id;
+
+            const { data: existing } = await _sb.from('task_submissions')
+                .select('*').eq('task_id', task.id).eq('user_id', currentUser.id).single();
+
+            const code = existing?.code || task.starter_code || '';
+            createTab(`📝 ${task.title}`, code, '', null, null, task.id);
+            appendLine(`\n📝 Aufgabe "${task.title}" geöffnet. Speichern = Fortschritt, Abgeben = fertig.\n`, 'ok');
+            updateTaskModeUI();
+        }
+
+        function updateTaskModeUI() {
+            const tab = getActiveTab();
+            const inTaskMode = !!tab?.taskId;
+            const submitBtn = document.getElementById('submitTaskBtn');
+            const saveBtn = document.getElementById('cloudSaveBtn');
+            const updateBtn = document.getElementById('updateProjectBtn');
+            if (submitBtn) submitBtn.style.display = inTaskMode ? 'inline-flex' : 'none';
+            if (saveBtn) saveBtn.style.display = inTaskMode ? 'none' : (currentUser ? 'inline-flex' : 'none');
+            if (updateBtn && !inTaskMode) {
+                updateBtn.style.display = (currentUser && tab?.projectId) ? 'inline-flex' : 'none';
+            } else if (updateBtn) {
+                updateBtn.style.display = 'none';
+            }
+        }
+
+        async function saveTaskProgress() {
+            const tab = getActiveTab();
+            if (!tab?.taskId) return;
+            const btn = document.getElementById('submitTaskBtn');
+            const origText = btn.textContent;
+            try {
+                await _sb.from('task_submissions').upsert({
+                    task_id: tab.taskId, user_id: currentUser.id,
+                    code: editor.getValue(), status: 'in_progress',
+                    updated_at: new Date().toISOString()
+                }, { onConflict: 'task_id,user_id' });
+                appendLine('\n💾 Aufgabe gespeichert.\n', 'ok');
+            } catch(err) { appendLine(`\n✗ Fehler: ${err.message}\n`, 'err'); }
+        }
+
+        async function submitTask() {
+            const tab = getActiveTab();
+            if (!tab?.taskId) return;
+            if (!confirm('Aufgabe jetzt abgeben? Du kannst danach noch weiter speichern.')) return;
+            const btn = document.getElementById('submitTaskBtn');
+            btn.disabled = true; btn.textContent = '…';
+            try {
+                await _sb.from('task_submissions').upsert({
+                    task_id: tab.taskId, user_id: currentUser.id,
+                    code: editor.getValue(), status: 'submitted',
+                    updated_at: new Date().toISOString()
+                }, { onConflict: 'task_id,user_id' });
+                appendLine('\n✅ Aufgabe abgegeben!\n', 'ok');
+                btn.textContent = '✓ Abgegeben';
+            } catch(err) {
+                appendLine(`\n✗ Fehler: ${err.message}\n`, 'err');
+                btn.disabled = false; btn.textContent = origText;
+            }
         }
 
         function openJoinClassModal() {
@@ -1028,6 +1148,8 @@ sys.modules['turtle'] = _turtle_mod
             document.getElementById('myProjectsBtn').style.display = loggedIn ? 'inline-flex' : 'none';
             document.getElementById('dashboardBtn').style.display = (loggedIn && isTeacher) ? 'inline-flex' : 'none';
             document.getElementById('qrBtn').style.display = (loggedIn && isTeacher) ? 'inline-flex' : 'none';
+            const isStudent = loggedIn && !isTeacher;
+            document.getElementById('aufgabenBtn').style.display = isStudent ? 'inline-flex' : 'none';
             if (!loggedIn) {
                 _currentProjectId = null; _currentProjectTitle = null;
                 document.getElementById('updateProjectBtn').style.display = 'none';
@@ -1314,7 +1436,7 @@ sys.modules['turtle'] = _turtle_mod
             });
         }
 
-        function createTab(title, code, desc, projectId, projectTitle) {
+        function createTab(title, code, desc, projectId, projectTitle, taskId) {
             saveCurrentTabState();
             const id = _newTabId();
             _tabs.push({
@@ -1324,6 +1446,7 @@ sys.modules['turtle'] = _turtle_mod
                 description: desc || '',
                 projectId: projectId || null,
                 projectTitle: projectTitle || null,
+                taskId: taskId || null,
             });
             _activeTabId = id;
             _loadTabIntoEditor(id);
@@ -1336,6 +1459,7 @@ sys.modules['turtle'] = _turtle_mod
             _activeTabId = id;
             _loadTabIntoEditor(id);
             renderTabBar();
+            updateTaskModeUI();
         }
 
         function _loadTabIntoEditor(id) {
@@ -1386,7 +1510,13 @@ sys.modules['turtle'] = _turtle_mod
             if (e.key === 'Enter') handleCloudSave();
         });
 
+        async function handleCloudSaveTask() {
+            await saveTaskProgress();
+        }
+
         async function handleCloudSave() {
+            const tab = getActiveTab();
+            if (tab?.taskId) { await saveTaskProgress(); return; }
             const title = document.getElementById('saveTitleInput').value.trim() || 'Unbenannt';
             const btn = document.getElementById('saveSubmitBtn');
             btn.disabled = true; btn.textContent = '…';
