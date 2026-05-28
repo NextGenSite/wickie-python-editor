@@ -1314,7 +1314,11 @@ sys.modules['turtle'] = _turtle_mod
             try {
                 if (_authMode === 'login') {
                     const { error } = await _sb.auth.signInWithPassword({ email, password });
-                    if (error) throw error;
+                    if (error) {
+                        if (error.message?.toLowerCase().includes('email not confirmed'))
+                            throw new Error('E-Mail noch nicht bestätigt. Bitte prüfe deinen Posteingang und klicke auf den Bestätigungslink.');
+                        throw error;
+                    }
                     closeModal('authModal');
                 } else {
                     const firstName  = document.getElementById('authFirstName').value.trim();
