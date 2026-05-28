@@ -1093,26 +1093,39 @@ sys.modules['turtle'] = _turtle_mod
             }
         }
 
+        async function _saveTaskToDb(status) {
+            const tab = getActiveTab();
+            if (!tab?.taskId) return false;
+            const newStatus = status === 'submitted' ? 'submitted'
+                : (tab.taskStatus === 'submitted' ? 'submitted' : 'in_progress');
+            const { data: existing } = await _sb.from('task_submissions')
+                .select('id').eq('task_id', tab.taskId).eq('user_id', currentUser.id).maybeSingle();
+            let error;
+            if (existing) {
+                ({ error } = await _sb.from('task_submissions')
+                    .update({ code: editor.getValue(), status: newStatus, updated_at: new Date().toISOString() })
+                    .eq('id', existing.id));
+            } else {
+                ({ error } = await _sb.from('task_submissions')
+                    .insert({ task_id: tab.taskId, user_id: currentUser.id, code: editor.getValue(), status: newStatus }));
+            }
+            if (error) throw error;
+            tab.taskStatus = newStatus;
+            return true;
+        }
+
         async function saveTaskProgress() {
             const tab = getActiveTab();
             if (!tab?.taskId) return;
-            const saveBtn = document.getElementById('taskSaveBtn');
-            if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = '…'; }
+            const btn = document.getElementById('taskSaveBtn');
+            if (btn) { btn.disabled = true; btn.textContent = '…'; }
             try {
-                // Nicht von 'submitted' auf 'in_progress' zurücksetzen
-                const newStatus = tab.taskStatus === 'submitted' ? 'submitted' : 'in_progress';
-                const { error } = await _sb.from('task_submissions').upsert({
-                    task_id: tab.taskId, user_id: currentUser.id,
-                    code: editor.getValue(), status: newStatus,
-                    updated_at: new Date().toISOString()
-                }, { onConflict: 'task_id,user_id' });
-                if (error) throw error;
-                if (tab.taskStatus !== 'submitted') tab.taskStatus = 'in_progress';
+                await _saveTaskToDb('in_progress');
                 appendLine('\n💾 Aufgabe gespeichert.\n', 'ok');
             } catch(err) {
                 appendLine(`\n✗ Fehler beim Speichern: ${err.message}\n`, 'err');
             } finally {
-                if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '💾 Speichern'; }
+                if (btn) { btn.disabled = false; btn.textContent = '💾 Speichern'; }
             }
         }
 
@@ -1123,13 +1136,7 @@ sys.modules['turtle'] = _turtle_mod
             const origText = btn.textContent;
             btn.disabled = true; btn.textContent = '…';
             try {
-                const { error } = await _sb.from('task_submissions').upsert({
-                    task_id: tab.taskId, user_id: currentUser.id,
-                    code: editor.getValue(), status: 'submitted',
-                    updated_at: new Date().toISOString()
-                }, { onConflict: 'task_id,user_id' });
-                if (error) throw error;
-                tab.taskStatus = 'submitted';
+                await _saveTaskToDb('submitted');
                 appendLine('\n✅ Aufgabe abgegeben!\n', 'ok');
                 btn.disabled = false;
                 btn.textContent = '✓ Abgegeben';
