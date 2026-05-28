@@ -1084,8 +1084,8 @@ sys.modules['turtle'] = _turtle_mod
                 submitBtn.style.display = inTaskMode ? 'inline-flex' : 'none';
                 if (!inTaskMode) { submitBtn.disabled = false; submitBtn.textContent = '✅ Abgeben'; }
             }
-            if (taskSaveBtn) taskSaveBtn.style.display = inTaskMode ? 'inline-flex' : 'none';
-            if (saveBtn) saveBtn.style.display = inTaskMode ? 'none' : (currentUser ? 'inline-flex' : 'none');
+            if (taskSaveBtn) taskSaveBtn.style.display = 'none';
+            if (saveBtn) saveBtn.style.display = currentUser ? 'inline-flex' : 'none';
             if (updateBtn && !inTaskMode) {
                 updateBtn.style.display = (currentUser && tab?.projectId) ? 'inline-flex' : 'none';
             } else if (updateBtn) {
