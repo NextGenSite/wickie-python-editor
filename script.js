@@ -948,6 +948,8 @@ sys.modules['turtle'] = _turtle_mod
         // ── Auth State ────────────────────────────────────────────────────────
         let currentUser = null;
         let currentProfile = null;
+        let _currentProjectId = null;
+        let _currentProjectTitle = null;
 
         _sb.auth.onAuthStateChange((_event, session) => {
             currentUser = session?.user ?? null;
@@ -1264,11 +1266,11 @@ sys.modules['turtle'] = _turtle_mod
         }
 
         // Enter-Taste im Auth-Modal
-        ['authEmail', 'authPassword', 'authName', 'authSchoolKey', 'authTeacherKey'].forEach(id =>
-            document.getElementById(id).addEventListener('keydown', e => {
+        ['authEmail', 'authPassword', 'authFirstName', 'authLastName', 'authSchoolKey', 'authTeacherKey'].forEach(id => {
+            document.getElementById(id)?.addEventListener('keydown', e => {
                 if (e.key === 'Enter') handleAuthSubmit();
-            })
-        );
+            });
+        });
 
         // ── Tab-System ───────────────────────────────────────────────────────
         let _tabs = [];
@@ -1372,8 +1374,6 @@ sys.modules['turtle'] = _turtle_mod
         }
 
         // ── Projekt speichern ─────────────────────────────────────────────────
-        let _currentProjectId = null;
-        let _currentProjectTitle = null;
 
         function openSaveTitleModal() {
             document.getElementById('saveTitleInput').value = '';
